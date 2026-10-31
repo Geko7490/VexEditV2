@@ -18,7 +18,7 @@ class ExportController(
 ) {
     private var transformer: Transformer? = null
 
-    fun exportSingleSource(uri: Uri, displayName: String = "vex-export"): File {
+    fun exportSingleSource(uri: Uri, displayName: String = "vex-export", startMs: Long = 0L, endMs: Long = 0L): File {
         val output = File(context.getExternalFilesDir(null), "${displayName.replace(Regex("[^A-Za-z0-9_-]"), "_")}-${System.currentTimeMillis()}.mp4")
         output.parentFile?.mkdirs()
         val listener = object : Transformer.Listener {
@@ -34,7 +34,12 @@ class ExportController(
             .addListener(listener)
             .build()
         onProgress(true, "MP4 dışa aktarılıyor…")
-        transformer?.start(MediaItem.fromUri(uri), output.absolutePath)
+        val clipping = MediaItem.ClippingConfiguration.Builder()
+            .setStartPositionMs(startMs.coerceAtLeast(0L))
+            .apply { if (endMs > startMs) setEndPositionMs(endMs) }
+            .build()
+        val source = MediaItem.Builder().setUri(uri).setClippingConfiguration(clipping).build()
+        transformer?.start(source, output.absolutePath)
         return output
     }
 
