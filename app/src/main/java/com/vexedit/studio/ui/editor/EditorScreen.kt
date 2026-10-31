@@ -298,23 +298,27 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                 Text("KATMANLAR", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
                 TextButton(onClick = { gapMode = if (gapMode == TimelineGapMode.KEEP_GAP) TimelineGapMode.RIPPLE else TimelineGapMode.KEEP_GAP }) { Text(if (gapMode == TimelineGapMode.KEEP_GAP) "Boşluk: Koru" else "Boşluk: Kapat") }
             }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("TIME", color = VexPalette.TextDisabled, modifier = Modifier.width(78.dp), style = MaterialTheme.typography.labelSmall)
-                Row(Modifier.weight(1f).horizontalScroll(timelineScrollState), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("00:00", color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall)
-                    repeat(12) { i -> Text(timeLabel((i + 1) * 1000L), color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width((72 * zoom).dp)) }
-                }
-            }
-            Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                EditorTrackType.entries.filter { type -> type != EditorTrackType.TEXT }.forEach { type ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.width(78.dp).height(58.dp).background(VexPalette.Background, RoundedCornerShape(5.dp)).padding(start = 7.dp), verticalArrangement = Arrangement.Center) {
+            val timelineContentWidth = (timelineDuration / 1000f * 72f * zoom).coerceAtLeast(280f)
+
+            Row(
+                Modifier.fillMaxWidth().weight(1f),
+                verticalAlignment = Alignment.Top
+            ) {
+                // Fixed track headers stay in place while the timeline content scrolls.
+                Column(Modifier.width(78.dp)) {
+                    Spacer(Modifier.height(28.dp))
+                    EditorTrackType.entries.forEach { type ->
+                        Column(
+                            Modifier.fillMaxWidth().height(58.dp)
+                                .background(VexPalette.Background, RoundedCornerShape(4.dp))
+                                .padding(start = 7.dp),
+                            verticalArrangement = Arrangement.Center
+                        ) {
                             Text(
                                 when (type) {
                                     EditorTrackType.VIDEO -> "Video"
-                                    EditorTrackType.PHOTO -> "Overlay"
-                                    EditorTrackType.MUSIC -> "Audio"
-                                    EditorTrackType.VOICE -> "Audio"
+                                    EditorTrackType.PHOTO -> "Overlays"
+                                    EditorTrackType.MUSIC, EditorTrackType.VOICE -> "Audio"
                                     EditorTrackType.SFX -> "Effects"
                                     EditorTrackType.TEXT -> "Text"
                                 },
@@ -336,49 +340,95 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                                 maxLines = 1
                             )
                         }
-                        Box(Modifier.weight(1f).horizontalScroll(timelineScrollState)) {
-                        TimelineClipLane(
-                            trackType = type,
-                            clips = clips,
-                            selectedId = selectedId,
-                            zoom = zoom,
-                            timelineDurationMs = timelineDuration,
-                            playheadMs = playheadMs,
-                            onSelect = { clip -> selectedId = clip.id; playheadMs = clip.startMs },
-                            onMove = { clip, proposedStart ->
-                                val candidates = TimelineEngine.snapCandidates(clips.filterNot { it.id == clip.id }, playheadMs)
-                                val snapped = TimelineEngine.snap(proposedStart, candidates, (10000f / (72f * zoom)).toLong().coerceAtLeast(30L))
-                                playheadMs = snapped.positionMs
-                                updateClip(clip.id) { TimelineEngine.move(it, snapped.positionMs) }
-                            },
-                            onDragPreview = { clip, proposedStart ->
-                                val previewPosition = proposedStart.coerceAtLeast(0L)
-                                playheadMs = previewPosition
-                                if (clip.type == EditorTrackType.VIDEO && clip.uri != null) {
-                                    if (activeVideo != clip.uri) {
-                                        activeVideo = clip.uri
-                                        activePhoto = null
-                                        player.setMediaItem(MediaItem.fromUri(clip.uri))
-                                        player.prepare()
-                                    }
-                                    val sourcePreviewMs = (clip.sourceInMs + (previewPosition - clip.startMs).coerceIn(0L, clip.visibleDurationMs))
-                                        .coerceIn(clip.sourceInMs, clip.sourceOutMs)
-                                    player.seekTo(sourcePreviewMs)
-                                }
-                            },
-                            onTrimStart = { clip, sourceIn ->
-                                updateClip(clip.id) { TimelineEngine.trimStart(it, sourceIn) }
-                            },
-                            onTrimEnd = { clip, sourceOut ->
-                                updateClip(clip.id) { TimelineEngine.trimEnd(it, sourceOut) }
-                            }
-                        )
-                        }
+                        Spacer(Modifier.height(1.dp))
                     }
                 }
+
+                Box(Modifier.weight(1f).fillMaxHeight()) {
+                    Column(
+                        Modifier.fillMaxSize().horizontalScroll(timelineScrollState)
+                    ) {
+                        Row(
+                            Modifier.width(timelineContentWidth.dp).height(28.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("00:00", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
+                            repeat((timelineDuration / 1000L).toInt().coerceAtLeast(8)) { index ->
+                                Text(
+                                    timeLabel((index + 1) * 1000L),
+                                    color = if ((index + 1) % 2 == 1) VexPalette.Purple else VexPalette.TextSecondary,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.width((72f * zoom).dp)
+                                )
+                            }
+                        }
+
+                        EditorTrackType.entries.forEach { type ->
+                            TimelineClipLane(
+                                trackType = type,
+                                clips = clips,
+                                selectedId = selectedId,
+                                zoom = zoom,
+                                timelineDurationMs = timelineDuration,
+                                playheadMs = playheadMs,
+                                onSelect = { clip ->
+                                    selectedId = clip.id
+                                    playheadMs = clip.startMs
+                                },
+                                onMove = { clip, proposedStart ->
+                                    val candidates = TimelineEngine.snapCandidates(clips.filterNot { it.id == clip.id }, playheadMs)
+                                    val snapped = TimelineEngine.snap(
+                                        proposedStart,
+                                        candidates,
+                                        (10000f / (72f * zoom)).toLong().coerceAtLeast(30L)
+                                    )
+                                    playheadMs = snapped.positionMs
+                                    updateClip(clip.id) { TimelineEngine.move(it, snapped.positionMs) }
+                                },
+                                onDragPreview = { clip, proposedStart ->
+                                    val previewPosition = proposedStart.coerceAtLeast(0L)
+                                    playheadMs = previewPosition
+                                    if (clip.type == EditorTrackType.VIDEO && clip.uri != null) {
+                                        if (activeVideo != clip.uri) {
+                                            activeVideo = clip.uri
+                                            activePhoto = null
+                                            player.setMediaItem(MediaItem.fromUri(clip.uri))
+                                            player.prepare()
+                                        }
+                                        val sourcePreviewMs = (
+                                            clip.sourceInMs + (previewPosition - clip.startMs)
+                                                .coerceIn(0L, clip.visibleDurationMs)
+                                            ).coerceIn(clip.sourceInMs, clip.sourceOutMs)
+                                        player.seekTo(sourcePreviewMs)
+                                    }
+                                },
+                                onTrimStart = { clip, sourceIn ->
+                                    updateClip(clip.id) { TimelineEngine.trimStart(it, sourceIn) }
+                                },
+                                onTrimEnd = { clip, sourceOut ->
+                                    updateClip(clip.id) { TimelineEngine.trimEnd(it, sourceOut) }
+                                }
+                            )
+                            Spacer(Modifier.height(1.dp))
+                        }
+                    }
+
+                    // A fixed center playhead, like the supplied reference UI.
+                    Box(
+                        Modifier.align(Alignment.TopCenter)
+                            .width(2.dp)
+                            .fillMaxHeight()
+                            .background(VexPalette.Purple)
+                    )
+                }
             }
+
             if (clips.isEmpty()) {
-                Text("Başlamak için Medya Ekle'ye dokun", color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall)
+                Text(
+                    "Başlamak için Medya Ekle'ye dokun",
+                    color = VexPalette.TextDisabled,
+                    style = MaterialTheme.typography.labelSmall
+                )
             }
         }
         Row(
