@@ -4,8 +4,8 @@ import android.content.Context
 import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.transformer.Composition
-import androidx.media3.transformer.EditedMediaItem
 import androidx.media3.transformer.Transformer
+import androidx.media3.transformer.ExportResult
 import java.io.File
 
 /**
@@ -22,7 +22,7 @@ class ExportController(
         val output = File(context.getExternalFilesDir(null), "${displayName.replace(Regex("[^A-Za-z0-9_-]"), "_")}-${System.currentTimeMillis()}.mp4")
         output.parentFile?.mkdirs()
         val listener = object : Transformer.Listener {
-            override fun onCompleted(composition: Composition, exportResult: Transformer.ExportResult) {
+            override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                 onProgress(false, "Export tamamlandı: ${output.absolutePath}")
             }
 
