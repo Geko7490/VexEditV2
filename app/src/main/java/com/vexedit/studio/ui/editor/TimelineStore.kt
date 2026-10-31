@@ -22,6 +22,7 @@ class TimelineStore(context: Context, private val projectId: String) {
                         name = item.optString("name", "Clip"),
                         uri = item.optString("uri").takeIf { it.isNotBlank() }?.let(Uri::parse),
                         type = type,
+                        trackId = item.optString("trackId", type.name),
                         durationMs = item.optLong("durationMs"),
                         startMs = item.optLong("startMs"),
                         sourceInMs = item.optLong("sourceInMs"),
@@ -42,6 +43,7 @@ class TimelineStore(context: Context, private val projectId: String) {
                     .put("name", clip.name)
                     .put("uri", clip.uri?.toString().orEmpty())
                     .put("type", clip.type.name)
+                    .put("trackId", clip.trackId)
                     .put("durationMs", clip.durationMs)
                     .put("startMs", clip.startMs)
                     .put("sourceInMs", clip.sourceInMs)
