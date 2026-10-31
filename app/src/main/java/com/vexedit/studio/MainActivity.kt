@@ -22,7 +22,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -367,7 +367,7 @@ private fun ProjectsScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(filtered, key = { it.id }) { project ->
+                gridItems(filtered, key = { it.id }) { project ->
                     ProjectCard(project, compact = false, onOpen = { onOpen(project) }, onRename = { onRename(project) }, onDuplicate = { onDuplicate(project) }, onTrash = { onTrash(project) })
                 }
             }
@@ -392,7 +392,7 @@ private fun ProjectCard(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     Card(
-        modifier = Modifier.width(if (compact) 220.dp else 0.dp).then(if (compact) Modifier else Modifier.fillMaxWidth()).clickable(onClick = onOpen),
+        modifier = (if (compact) Modifier.width(220.dp) else Modifier.fillMaxWidth()).clickable(onClick = onOpen),
         colors = CardDefaults.cardColors(containerColor = VexPalette.Panel),
         shape = RoundedCornerShape(VexDimensions.CornerMedium)
     ) {
