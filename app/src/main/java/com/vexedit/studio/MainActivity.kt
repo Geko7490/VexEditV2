@@ -83,6 +83,7 @@ import com.vexedit.studio.ui.theme.VexDimensions
 import com.vexedit.studio.ui.theme.VexEditTheme
 import com.vexedit.studio.ui.theme.VexPalette
 import com.vexedit.studio.ui.projects.ProjectViewModel
+import com.vexedit.studio.ui.editor.EditorScreen
 import java.text.DateFormat
 import java.util.Date
 
@@ -230,18 +231,7 @@ private fun VexStudioApp(viewModel: ProjectViewModel) {
         )
     }
     openedProject?.let { project ->
-        AlertDialog(
-            onDismissRequest = { openedProject = null },
-            title = { Text(project.name) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Proje kaydı başarıyla açıldı.")
-                    Text("${project.aspectRatio}  •  ${project.resolution}  •  ${project.fps} FPS", color = VexPalette.TextSecondary)
-                    Text("Video editörü ve timeline entegrasyonu sonraki aşamada bağlanacak.", color = VexPalette.TextSecondary, style = MaterialTheme.typography.bodySmall)
-                }
-            },
-            confirmButton = { TextButton(onClick = { openedProject = null }) { Text("Tamam") } }
-        )
+        EditorScreen(project = project, onBack = { openedProject = null })
     }
 }
 
