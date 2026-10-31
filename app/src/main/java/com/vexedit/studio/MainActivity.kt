@@ -145,7 +145,7 @@ private fun VexStudioApp(viewModel: ProjectViewModel) {
         },
         bottomBar = {
             NavigationBar(containerColor = VexPalette.Panel) {
-                AppDestination.entries.forEach { item ->
+                AppDestination.entries.filter { it != AppDestination.TRASH }.forEach { item ->
                     NavigationBarItem(
                         selected = destination == item,
                         onClick = { navigate(item) },
@@ -195,7 +195,7 @@ private fun VexStudioApp(viewModel: ProjectViewModel) {
                 onRename = { renameTarget = it },
                 onDuplicate = { viewModel.duplicate(it.id) },
                 onTrash = { viewModel.trash(it.id) },
-                onTrashOpen = { destination = AppDestination.SETTINGS }
+                onTrashOpen = { destination = AppDestination.TRASH }
             )
             AppDestination.AUDIO -> PlaceholderScreen("Audio Studio", "Ses düzenleme araçları sonraki geliştirme aşamasında.", padding)
             AppDestination.SETTINGS -> TrashScreen(
@@ -500,13 +500,13 @@ private fun NewProjectDialog(onDismiss: () -> Unit, onCreate: (String, String, S
                 }
                 Text("Çözünürlük", style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("720p", "1080p", "2K", "4K").forEach { value ->
+                    listOf("480p", "720p", "1080p", "2K", "4K").forEach { value ->
                         FilterChip(selected = resolution == value, onClick = { resolution = value }, label = { Text(value) })
                     }
                 }
                 Text("Kare hızı", style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(24, 30, 60).forEach { value ->
+                    listOf(15, 24, 30, 60, 120).forEach { value ->
                         FilterChip(selected = fps == value, onClick = { fps = value }, label = { Text("$value FPS") })
                     }
                 }
