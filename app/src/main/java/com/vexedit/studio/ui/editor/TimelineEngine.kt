@@ -35,7 +35,7 @@ object TimelineEngine {
     const val MIN_CLIP_DURATION_MS = 1L
 
     fun ordered(clips: List<EditorClip>, trackId: String? = null): List<EditorClip> =
-        clips.filter { trackId == null || it.id == trackId }
+        clips.filter { trackId == null || it.trackId == trackId }
             .sortedWith(compareBy<EditorClip> { it.startMs }.thenBy { it.id })
 
     fun trimStart(clip: EditorClip, newSourceInMs: Long): EditorClip {
@@ -78,7 +78,7 @@ object TimelineEngine {
         val duration = removed.visibleDurationMs
         return clips.filterNot { it.id == clipId }.map { clip ->
             if (gapMode == TimelineGapMode.RIPPLE &&
-                clip.type == removed.type &&
+                clip.trackId == removed.trackId &&
                 clip.startMs >= removed.endMs
             ) clip.copy(startMs = (clip.startMs - duration).coerceAtLeast(0L))
             else clip
