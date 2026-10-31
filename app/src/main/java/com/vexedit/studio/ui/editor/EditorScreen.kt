@@ -154,7 +154,11 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                 Text(project.name, color = VexPalette.TextPrimary, style = MaterialTheme.typography.titleMedium, maxLines = 1)
                 Text("${project.aspectRatio} • ${project.resolution} • ${project.fps} FPS", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
             }
-            IconButton(onClick = { activeVideo?.let { exportController.exportSingleSource(it, project.name) } }, enabled = activeVideo != null && !exportRunning) {
+            IconButton(onClick = {
+                val exportClip = selected?.takeIf { it.type == EditorTrackType.VIDEO && it.uri != null }
+                    ?: clips.firstOrNull { it.type == EditorTrackType.VIDEO && it.uri != null }
+                exportClip?.uri?.let { exportController.exportSingleSource(it, project.name, exportClip.sourceInMs, exportClip.sourceOutMs) }
+            }, enabled = clips.any { it.type == EditorTrackType.VIDEO && it.uri != null } && !exportRunning) {
                 Icon(Icons.Rounded.FileDownload, contentDescription = "MP4 dışa aktar", tint = VexPalette.Purple)
             }
         }
@@ -195,6 +199,15 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                     FilterChip(selected = previewQuality == q, onClick = { previewQuality = q }, label = { Text(q) })
                 }
             }
+        }
+
+        if (duration > 0L) {
+            Slider(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                value = (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f),
+                onValueChange = { player.seekTo((it * duration).toLong()) },
+                valueRange = 0f..1f
+            )
         }
 
         Column(
@@ -272,7 +285,11 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                 Text("Seçili: ${selected.name} • ${timeLabel(selected.visibleDurationMs)}", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
                 if (selected.type == EditorTrackType.MUSIC || selected.type == EditorTrackType.VOICE || selected.type == EditorTrackType.SFX) {
                     Text("Ses seviyesi: ${(audioVolume * 100).toInt()}%", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
-                    Slider(value = audioVolume, onValueChange = { audioVolume = it }, valueRange = 0f..1f)
+                    Slider(value = selected.volume, onValueChange = { value ->
+                        audioVolume = value
+                        val index = clips.indexOfFirst { it.id == selected.id }
+                        if (index >= 0) clips[index] = clips[index].copy(volume = value)
+                    }, valueRange = 0f..1f)
                 }
             }
             Text("Önizleme kalitesi seçimi arayüzü hazır; cihaz/codec tabanlı gerçek kalite profilleri sonraki optimizasyon adımında uygulanacak.", color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall)
