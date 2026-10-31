@@ -35,6 +35,15 @@ Native Android video editor built with Kotlin and Jetpack Compose.
 - Trash supports restore and permanent deletion.
 - Project metadata survives app restarts.
 
+## Step 05 — Native editor foundation
+
+- Media3 ExoPlayer preview with play/pause and timeline seeking.
+- Native Android video/audio document pickers with persisted read permission attempts.
+- Timeline lanes for video, photo, music, voice, and SFX; clip selection, split, trim-in/out, and delete controls.
+- Audio clip volume metadata controls and track color semantics.
+- Media3 Transformer single-source MP4 export with the selected source trim range.
+- Preview quality selector UI (Auto/Low/Mid/High); device-specific decoding/quality profiles remain future optimization work.
+
 ### Current implementation boundaries
 
 - Opening a project currently confirms and displays its saved project settings; the video timeline/editor is a later roadmap phase.
@@ -59,7 +68,5 @@ Debug APK output: `app/build/outputs/apk/debug/app-debug.apk`.
 - [x] Step 03 — Home dashboard, bottom navigation, and project library
 - [x] Step 04 foundation — Room-backed project metadata, create/rename/duplicate/trash/restore/delete
 - [ ] Step 04 follow-up — Internal/external project file storage, JSON + binary serialization, autosave/recovery, manual backup archive
-- [ ] Step 05 — Media import and library
-- [ ] Step 06 — Video playback and preview
-- [ ] Step 07 — Multitrack timeline
-- [ ] Step 08 — Editing tools and export engine
+- [x] Step 05 foundation — Native media import, ExoPlayer preview, timeline lanes, basic clip controls, and single-source MP4 export
+- [ ] Step 05 follow-up — Persist timeline edits, true multi-clip composition, synchronized multi-track audio mixing, thumbnails/waveforms, undo/redo, and full export profiles
