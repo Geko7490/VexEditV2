@@ -26,7 +26,7 @@ class ExportController(
                 onProgress(false, "Export tamamlandı: ${output.absolutePath}")
             }
 
-            override fun onError(composition: Composition, exportResult: Transformer.ExportResult, exportException: androidx.media3.transformer.ExportException) {
+            override fun onError(composition: Composition, exportResult: ExportResult, exportException: androidx.media3.transformer.ExportException) {
                 onProgress(false, "Export hatası: ${exportException.message ?: "Bilinmeyen hata"}")
             }
         }
