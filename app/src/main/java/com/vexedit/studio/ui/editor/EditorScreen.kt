@@ -47,6 +47,8 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
     var playheadMs by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(false) }
     var zoom by remember { mutableFloatStateOf(0.65f) }
+    var gapMode by remember { mutableStateOf(TimelineGapMode.KEEP_GAP) }
+    val timelineScrollState = rememberScrollState()
     var exportMessage by remember { mutableStateOf<String?>(null) }
     var exportRunning by remember { mutableStateOf(false) }
     var previewQuality by remember { mutableStateOf("Auto") }
@@ -244,6 +246,9 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                 Text("TIMELINE", color = VexPalette.TextPrimary, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 Text("Zoom", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
                 Slider(value = zoom, onValueChange = { zoom = it }, valueRange = 0.25f..1.5f, modifier = Modifier.width(100.dp))
+                TextButton(onClick = { gapMode = if (gapMode == TimelineGapMode.KEEP_GAP) TimelineGapMode.RIPPLE else TimelineGapMode.KEEP_GAP }) {
+                    Text(if (gapMode == TimelineGapMode.KEEP_GAP) "Keep Gap" else "Ripple")
+                }
                 IconButton(onClick = { undoStack.lastOrNull()?.let { previous -> redoStack.add(clips.toList()); undoStack.removeAt(undoStack.lastIndex); replaceAll(previous) } }, enabled = undoStack.isNotEmpty()) {
                     Icon(Icons.Rounded.Undo, "Undo", tint = if (undoStack.isNotEmpty()) VexPalette.TextPrimary else VexPalette.TextDisabled)
                 }
@@ -260,37 +265,30 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                 Text("00:00", color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall)
                 repeat(8) { i -> Text(timeLabel((i + 1) * 5000L), color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width((70 * zoom).dp)) }
             }
-            Column(Modifier.weight(1f).fillMaxWidth().horizontalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Column(Modifier.weight(1f).fillMaxWidth().horizontalScroll(timelineScrollState), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 EditorTrackType.entries.filter { type -> type != EditorTrackType.TEXT }.forEach { type ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(type.name, color = trackColor(type), style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(62.dp))
-                        Row(Modifier.width((timelineDuration / 1000f * 14f * zoom).coerceAtLeast(240f).dp).height(48.dp).background(VexPalette.Background, RoundedCornerShape(5.dp)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
-                            clips.filter { it.type == type }.sortedBy { it.startMs }.forEach { clip ->
-                                val width = (clip.visibleDurationMs / 1000f * 14f * zoom).coerceIn(52f, 320f)
-                                var dragDistance by remember(clip.id) { mutableFloatStateOf(0f) }
-                                Card(
-                                    modifier = Modifier.width(width.dp).fillMaxHeight().pointerInput(clip.id) {
-                                        detectDragGestures(
-                                            onDragEnd = {
-                                                if (dragDistance > 35f) moveClip(clip.id, 1)
-                                                if (dragDistance < -35f) moveClip(clip.id, -1)
-                                                dragDistance = 0f
-                                            },
-                                            onDragCancel = { dragDistance = 0f },
-                                            onDrag = { change, amount -> change.consume(); dragDistance += amount.x }
-                                        )
-                                    },
-                                    onClick = { selectedId = clip.id; playheadMs = clip.startMs },
-                                    colors = CardDefaults.cardColors(containerColor = if (selectedId == clip.id) VexPalette.PurpleTint else trackColor(type).copy(alpha = 0.25f)),
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Column(Modifier.fillMaxSize().padding(horizontal = 5.dp, vertical = 3.dp), verticalArrangement = Arrangement.Center) {
-                                        Text(clip.name.take(14), color = VexPalette.TextPrimary, maxLines = 1, style = MaterialTheme.typography.labelSmall)
-                                        Text(timeLabel(clip.visibleDurationMs), color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
-                                    }
-                                }
+                        TimelineClipLane(
+                            trackType = type,
+                            clips = clips,
+                            selectedId = selectedId,
+                            zoom = zoom,
+                            timelineDurationMs = timelineDuration,
+                            playheadMs = playheadMs,
+                            onSelect = { clip -> selectedId = clip.id; playheadMs = clip.startMs },
+                            onMove = { clip, proposedStart ->
+                                val candidates = TimelineEngine.snapCandidates(clips.filterNot { it.id == clip.id }, playheadMs)
+                                val snapped = TimelineEngine.snap(proposedStart, candidates, 180L)
+                                updateClip(clip.id) { TimelineEngine.move(it, snapped.positionMs) }
+                            },
+                            onTrimStart = { clip, sourceIn ->
+                                updateClip(clip.id) { TimelineEngine.trimStart(it, sourceIn) }
+                            },
+                            onTrimEnd = { clip, sourceOut ->
+                                updateClip(clip.id) { TimelineEngine.trimEnd(it, sourceOut) }
                             }
-                        }
+                        )
                     }
                 }
             }
@@ -301,12 +299,14 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                         val splitAt = (playheadMs - selected.startMs + selected.sourceInMs).coerceIn(selected.sourceInMs, selected.sourceOutMs)
                         if (splitAt > selected.sourceInMs && splitAt < selected.sourceOutMs) {
                             snapshot()
-                            val index = clips.indexOfFirst { it.id == selected.id }
-                            clips[index] = selected.copy(sourceOutMs = splitAt)
-                            val second = selected.copy(id = UUID.randomUUID().toString(), name = selected.name + " (2)", startMs = playheadMs, sourceInMs = splitAt)
-                            clips.add(index + 1, second)
-                            selectedId = second.id
-                            store.save(clips.toList())
+                            val pair = TimelineEngine.split(selected, playheadMs)
+                            if (pair != null) {
+                                val index = clips.indexOfFirst { it.id == selected.id }
+                                clips[index] = pair.first
+                                clips.add(index + 1, pair.second)
+                                selectedId = pair.second.id
+                                store.save(clips.toList())
+                            }
                         }
                     }, enabled = selected.type == EditorTrackType.VIDEO && playheadMs > selected.startMs && playheadMs < selected.endMs) { Icon(Icons.Rounded.ContentCut, null); Text("Böl") }
                     OutlinedButton(onClick = { updateClip(selected.id) { val delta = (playheadMs - it.startMs).coerceAtLeast(0L); it.copy(startMs = playheadMs, sourceInMs = (it.sourceInMs + delta).coerceAtMost(it.sourceOutMs - 250L)) } }, enabled = selected.type == EditorTrackType.VIDEO && playheadMs > selected.startMs && playheadMs < selected.endMs) { Text("Baştan kırp") }
@@ -318,7 +318,7 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                         val copy = selected.copy(id = UUID.randomUUID().toString(), name = selected.name + " Copy", startMs = selected.endMs)
                         clips.add(copy); selectedId = copy.id; store.save(clips.toList())
                     }) { Icon(Icons.Rounded.ContentCopy, null); Text("Çoğalt") }
-                    OutlinedButton(onClick = { snapshot(); clips.removeAll { it.id == selected.id }; selectedId = clips.firstOrNull()?.id; store.save(clips.toList()) }) { Icon(Icons.Rounded.Delete, null); Text("Sil") }
+                    OutlinedButton(onClick = { snapshot(); replaceAll(TimelineEngine.delete(clips.toList(), selected.id, gapMode)); selectedId = clips.firstOrNull()?.id }) { Icon(Icons.Rounded.Delete, null); Text("Sil") }
                 }
                 if (selected.type == EditorTrackType.MUSIC || selected.type == EditorTrackType.VOICE || selected.type == EditorTrackType.SFX) {
                     Text("Ses seviyesi ${(selected.volume * 100).roundToInt()}%", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
