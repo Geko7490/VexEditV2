@@ -138,13 +138,6 @@ fun TimelineClipLane(
                 }
             }
         }
-        val playheadX = (playheadMs / 1000f * dpPerSecond).coerceAtLeast(0f)
-        Box(
-            Modifier.offset(x = playheadX.dp)
-                .width(2.dp)
-                .fillMaxHeight()
-                .background(Color.White.copy(alpha = 0.95f))
-        )
     }
 }
 
