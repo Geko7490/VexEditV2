@@ -175,7 +175,7 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
     }
     LaunchedEffect(playing, playheadMs, zoom) {
         if (playing && timelineScrollState.viewportSize > 0) {
-            val playheadPx = playheadMs / 1000f * 14f * zoom
+            val playheadPx = playheadMs / 1000f * 72f * zoom
             val target = (playheadPx - timelineScrollState.viewportSize / 2f).toInt().coerceAtLeast(0)
             timelineScrollState.animateScrollTo(target)
         }
@@ -279,7 +279,7 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(timelineScrollState), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("00:00", color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall)
-                repeat(8) { i -> Text(timeLabel((i + 1) * 5000L), color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width((70 * zoom).dp)) }
+                repeat(8) { i -> Text(timeLabel((i + 1) * 5000L), color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width((360 * zoom).dp)) }
             }
             Column(Modifier.weight(1f).fillMaxWidth().horizontalScroll(timelineScrollState), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 EditorTrackType.entries.filter { type -> type != EditorTrackType.TEXT }.forEach { type ->
@@ -380,7 +380,7 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
         ) {
             TextButton(onClick = onBack) { Icon(Icons.Rounded.Home, null); Spacer(Modifier.width(4.dp)); Text("Ana Sayfa") }
             TextButton(onClick = onBack) { Icon(Icons.Rounded.VideoLibrary, null); Spacer(Modifier.width(4.dp)); Text("Projeler") }
-            TextButton(onClick = { }) { Icon(Icons.Rounded.Edit, null, tint = VexPalette.Purple); Spacer(Modifier.width(4.dp)); Text("Stüdyo", color = VexPalette.Purple) }
+            TextButton(onClick = onBack, enabled = false) { Icon(Icons.Rounded.Edit, null, tint = VexPalette.Purple); Spacer(Modifier.width(4.dp)); Text("Stüdyo", color = VexPalette.Purple) }
         }
     }
 
