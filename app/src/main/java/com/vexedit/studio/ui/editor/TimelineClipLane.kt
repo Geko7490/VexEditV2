@@ -25,6 +25,7 @@ fun TimelineClipLane(
     selectedId: String?,
     zoom: Float,
     timelineDurationMs: Long,
+    playheadMs: Long,
     onSelect: (EditorClip) -> Unit,
     onMove: (EditorClip, Long) -> Unit,
     onTrimStart: (EditorClip, Long) -> Unit,
