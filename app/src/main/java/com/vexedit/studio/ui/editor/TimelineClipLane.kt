@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -59,6 +60,7 @@ fun TimelineClipLane(
             ) {
                 Card(
                     modifier = Modifier.fillMaxSize()
+                        .graphicsLayer { translationX = dragPx.floatValue }
                         .padding(horizontal = if (selected) 12.dp else 2.dp, vertical = 3.dp)
                         .pointerInput(clip.id, zoom, density) {
                             detectDragGestures(
