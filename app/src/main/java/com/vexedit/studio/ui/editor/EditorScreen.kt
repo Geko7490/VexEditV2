@@ -309,6 +309,7 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                             onMove = { clip, proposedStart ->
                                 val candidates = TimelineEngine.snapCandidates(clips.filterNot { it.id == clip.id }, playheadMs)
                                 val snapped = TimelineEngine.snap(proposedStart, candidates, (10000f / (72f * zoom)).toLong().coerceAtLeast(30L))
+                                playheadMs = snapped.positionMs
                                 updateClip(clip.id) { TimelineEngine.move(it, snapped.positionMs) }
                             },
                             onDragPreview = { clip, proposedStart ->
@@ -321,7 +322,9 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                                         player.setMediaItem(MediaItem.fromUri(clip.uri))
                                         player.prepare()
                                     }
-                                    player.seekTo((clip.sourceInMs + (previewPosition - proposedStart).coerceAtLeast(0L)).coerceIn(clip.sourceInMs, clip.sourceOutMs))
+                                    val sourcePreviewMs = (clip.sourceInMs + (previewPosition - clip.startMs).coerceIn(0L, clip.visibleDurationMs))
+                                        .coerceIn(clip.sourceInMs, clip.sourceOutMs)
+                                    player.seekTo(sourcePreviewMs)
                                 }
                             },
                             onTrimStart = { clip, sourceIn ->
