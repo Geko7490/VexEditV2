@@ -14,8 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.vexedit.studio.ui.theme.VexPalette
+import kotlin.math.abs
 import kotlin.math.roundToLong
 
 @Composable
@@ -28,25 +30,27 @@ fun TimelineClipLane(
     playheadMs: Long,
     onSelect: (EditorClip) -> Unit,
     onMove: (EditorClip, Long) -> Unit,
+    onDragPreview: (EditorClip, Long) -> Unit,
     onTrimStart: (EditorClip, Long) -> Unit,
     onTrimEnd: (EditorClip, Long) -> Unit
 ) {
-    val pixelsPerSecond = 14f * zoom
-    val contentWidth = (timelineDurationMs / 1000f * pixelsPerSecond).coerceAtLeast(240f)
+    val density = LocalDensity.current.density
+    val dpPerSecond = 72f * zoom
+    val contentWidth = (timelineDurationMs / 1000f * dpPerSecond).coerceAtLeast(280f)
     val laneClips = clips.filter { it.type == trackType }.sortedBy { it.startMs }
 
     Box(
         Modifier.width(contentWidth.dp)
-            .height(52.dp)
-            .background(VexPalette.Background, RoundedCornerShape(5.dp))
+            .height(58.dp)
+            .background(VexPalette.Background, RoundedCornerShape(6.dp))
     ) {
         laneClips.forEach { clip ->
             val selected = clip.id == selectedId
-            val clipWidth = (clip.visibleDurationMs / 1000f * pixelsPerSecond).coerceAtLeast(34f)
-            val clipOffset = (clip.startMs / 1000f * pixelsPerSecond).coerceAtLeast(0f)
-            val drag = remember(clip.id) { mutableFloatStateOf(0f) }
-            val trimLeft = remember(clip.id) { mutableFloatStateOf(0f) }
-            val trimRight = remember(clip.id) { mutableFloatStateOf(0f) }
+            val clipWidth = (clip.visibleDurationMs / 1000f * dpPerSecond).coerceAtLeast(42f)
+            val clipOffset = (clip.startMs / 1000f * dpPerSecond).coerceAtLeast(0f)
+            val dragPx = remember(clip.id) { mutableFloatStateOf(0f) }
+            val trimLeftPx = remember(clip.id) { mutableFloatStateOf(0f) }
+            val trimRightPx = remember(clip.id) { mutableFloatStateOf(0f) }
 
             Box(
                 Modifier.offset(x = clipOffset.dp)
@@ -55,35 +59,41 @@ fun TimelineClipLane(
             ) {
                 Card(
                     modifier = Modifier.fillMaxSize()
-                        .padding(horizontal = if (selected) 9.dp else 1.dp, vertical = 2.dp)
-                        .pointerInput(clip.id, zoom) {
+                        .padding(horizontal = if (selected) 12.dp else 2.dp, vertical = 3.dp)
+                        .pointerInput(clip.id, zoom, density) {
                             detectDragGestures(
-                                onDragStart = { drag.floatValue = 0f },
+                                onDragStart = {
+                                    dragPx.floatValue = 0f
+                                    onSelect(clip)
+                                },
                                 onDragEnd = {
-                                    if (kotlin.math.abs(drag.floatValue) > 3f) {
-                                        val deltaMs = (drag.floatValue / pixelsPerSecond * 1000f).roundToLong()
+                                    val deltaDp = dragPx.floatValue / density
+                                    if (abs(deltaDp) > 2f) {
+                                        val deltaMs = (deltaDp / dpPerSecond * 1000f).roundToLong()
                                         onMove(clip, (clip.startMs + deltaMs).coerceAtLeast(0L))
                                     }
-                                    drag.floatValue = 0f
+                                    dragPx.floatValue = 0f
                                 },
-                                onDragCancel = { drag.floatValue = 0f },
+                                onDragCancel = { dragPx.floatValue = 0f },
                                 onDrag = { change, amount ->
                                     change.consume()
-                                    drag.floatValue += amount.x
+                                    dragPx.floatValue += amount.x
+                                    val deltaMs = (dragPx.floatValue / density / dpPerSecond * 1000f).roundToLong()
+                                    onDragPreview(clip, (clip.startMs + deltaMs).coerceAtLeast(0L))
                                 }
                             )
                         },
                     onClick = { onSelect(clip) },
                     colors = CardDefaults.cardColors(
-                        containerColor = if (selected) VexPalette.PurpleTint else trackColorForLane(trackType).copy(alpha = 0.30f)
+                        containerColor = if (selected) VexPalette.PurpleTint else trackColorForLane(trackType).copy(alpha = 0.32f)
                     ),
-                    shape = RoundedCornerShape(4.dp)
+                    shape = RoundedCornerShape(5.dp)
                 ) {
                     Column(
-                        Modifier.fillMaxSize().padding(horizontal = 5.dp, vertical = 3.dp),
+                        Modifier.fillMaxSize().padding(horizontal = 7.dp, vertical = 4.dp),
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text(clip.name.take(18), color = VexPalette.TextPrimary, maxLines = 1)
+                        Text(clip.name.take(20), color = VexPalette.TextPrimary, maxLines = 1)
                         Text(formatTimelineTime(clip.visibleDurationMs), color = VexPalette.TextSecondary, maxLines = 1)
                     }
                 }
@@ -91,47 +101,47 @@ fun TimelineClipLane(
                 if (selected) {
                     Box(
                         Modifier.align(Alignment.CenterStart)
-                            .width(10.dp).fillMaxHeight()
-                            .background(VexPalette.Purple, RoundedCornerShape(topStart = 4.dp, bottomStart = 4.dp))
-                            .pointerInput(clip.id, zoom) {
+                            .width(14.dp).fillMaxHeight()
+                            .background(VexPalette.Purple, RoundedCornerShape(topStart = 5.dp, bottomStart = 5.dp))
+                            .pointerInput(clip.id, zoom, density) {
                                 detectDragGestures(
-                                    onDragStart = { trimLeft.floatValue = 0f },
+                                    onDragStart = { trimLeftPx.floatValue = 0f; onSelect(clip) },
                                     onDragEnd = {
-                                        val deltaMs = (trimLeft.floatValue / pixelsPerSecond * 1000f).roundToLong()
-                                        if (deltaMs != 0L) onTrimStart(clip, (clip.sourceInMs + deltaMs).coerceAtLeast(0L))
-                                        trimLeft.floatValue = 0f
+                                        val deltaMs = (trimLeftPx.floatValue / density / dpPerSecond * 1000f).roundToLong()
+                                        if (deltaMs != 0L) onTrimStart(clip, (clip.sourceInMs + deltaMs).coerceIn(0L, clip.sourceOutMs - 1L))
+                                        trimLeftPx.floatValue = 0f
                                     },
-                                    onDragCancel = { trimLeft.floatValue = 0f },
-                                    onDrag = { change, amount -> change.consume(); trimLeft.floatValue += amount.x }
+                                    onDragCancel = { trimLeftPx.floatValue = 0f },
+                                    onDrag = { change, amount -> change.consume(); trimLeftPx.floatValue += amount.x }
                                 )
                             }
                     )
                     Box(
                         Modifier.align(Alignment.CenterEnd)
-                            .width(10.dp).fillMaxHeight()
-                            .background(VexPalette.Purple, RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp))
-                            .pointerInput(clip.id, zoom) {
+                            .width(14.dp).fillMaxHeight()
+                            .background(VexPalette.Purple, RoundedCornerShape(topEnd = 5.dp, bottomEnd = 5.dp))
+                            .pointerInput(clip.id, zoom, density) {
                                 detectDragGestures(
-                                    onDragStart = { trimRight.floatValue = 0f },
+                                    onDragStart = { trimRightPx.floatValue = 0f; onSelect(clip) },
                                     onDragEnd = {
-                                        val deltaMs = (trimRight.floatValue / pixelsPerSecond * 1000f).roundToLong()
+                                        val deltaMs = (trimRightPx.floatValue / density / dpPerSecond * 1000f).roundToLong()
                                         if (deltaMs != 0L) onTrimEnd(clip, (clip.sourceOutMs + deltaMs).coerceAtLeast(clip.sourceInMs + 1L))
-                                        trimRight.floatValue = 0f
+                                        trimRightPx.floatValue = 0f
                                     },
-                                    onDragCancel = { trimRight.floatValue = 0f },
-                                    onDrag = { change, amount -> change.consume(); trimRight.floatValue += amount.x }
+                                    onDragCancel = { trimRightPx.floatValue = 0f },
+                                    onDrag = { change, amount -> change.consume(); trimRightPx.floatValue += amount.x }
                                 )
                             }
                     )
                 }
             }
         }
-        val playheadX = (playheadMs / 1000f * pixelsPerSecond).coerceAtLeast(0f)
+        val playheadX = (playheadMs / 1000f * dpPerSecond).coerceAtLeast(0f)
         Box(
             Modifier.offset(x = playheadX.dp)
                 .width(2.dp)
                 .fillMaxHeight()
-                .background(Color.White.copy(alpha = 0.9f))
+                .background(Color.White.copy(alpha = 0.95f))
         )
     }
 }
