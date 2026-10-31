@@ -54,6 +54,18 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
     val redoStack = remember { mutableStateListOf<List<EditorClip>>() }
     val selected = clips.firstOrNull { it.id == selectedId }
     val timelineDuration = (clips.maxOfOrNull { it.endMs } ?: 0L).coerceAtLeast(1000L)
+    LaunchedEffect(project.id) {
+        val firstVideo = clips.firstOrNull { it.type == EditorTrackType.VIDEO && it.uri != null }
+        if (firstVideo != null) {
+            activeVideo = firstVideo.uri
+            player.setMediaItem(MediaItem.fromUri(firstVideo.uri!!))
+            player.prepare()
+            player.pause()
+        } else {
+            val firstPhoto = clips.firstOrNull { it.type == EditorTrackType.PHOTO && it.uri != null }
+            activePhoto = firstPhoto?.uri
+        }
+    }
 
     fun snapshot() {
         undoStack.add(clips.toList())
@@ -297,7 +309,7 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                             store.save(clips.toList())
                         }
                     }, enabled = selected.type == EditorTrackType.VIDEO && playheadMs > selected.startMs && playheadMs < selected.endMs) { Icon(Icons.Rounded.ContentCut, null); Text("Böl") }
-                    OutlinedButton(onClick = { updateClip(selected.id) { it.copy(sourceInMs = (it.sourceInMs + (playheadMs - it.startMs).coerceAtLeast(0L)).coerceAtMost(it.sourceOutMs - 250L)) } }, enabled = selected.type == EditorTrackType.VIDEO && playheadMs > selected.startMs) { Text("Baştan kırp") }
+                    OutlinedButton(onClick = { updateClip(selected.id) { val delta = (playheadMs - it.startMs).coerceAtLeast(0L); it.copy(startMs = playheadMs, sourceInMs = (it.sourceInMs + delta).coerceAtMost(it.sourceOutMs - 250L)) } }, enabled = selected.type == EditorTrackType.VIDEO && playheadMs > selected.startMs && playheadMs < selected.endMs) { Text("Baştan kırp") }
                     OutlinedButton(onClick = { updateClip(selected.id) { it.copy(sourceOutMs = (it.sourceInMs + (playheadMs - it.startMs)).coerceIn(it.sourceInMs + 250L, it.durationMs)) } }, enabled = selected.type == EditorTrackType.VIDEO && playheadMs < selected.endMs) { Text("Sondan kırp") }
                     OutlinedButton(onClick = { updateClip(selected.id) { it.copy(startMs = (it.startMs - 500L).coerceAtLeast(0L)) } }) { Text("← 0.5s") }
                     OutlinedButton(onClick = { updateClip(selected.id) { it.copy(startMs = it.startMs + 500L) } }) { Text("0.5s →") }
