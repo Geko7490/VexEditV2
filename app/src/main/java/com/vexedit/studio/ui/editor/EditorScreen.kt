@@ -173,6 +173,13 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
         delay(250)
         store.save(clips.toList())
     }
+    LaunchedEffect(playing, playheadMs, zoom) {
+        if (playing && timelineScrollState.viewportSize > 0) {
+            val playheadPx = playheadMs / 1000f * 14f * zoom
+            val target = (playheadPx - timelineScrollState.viewportSize / 2f).toInt().coerceAtLeast(0)
+            timelineScrollState.animateScrollTo(target)
+        }
+    }
 
     val exportController = remember {
         ExportController(context) { running, message -> exportRunning = running; exportMessage = message }
@@ -261,7 +268,7 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                 OutlinedButton(onClick = { photoPicker.launch(arrayOf("image/*")) }) { Icon(Icons.Rounded.Image, null); Text("Foto +") }
                 OutlinedButton(onClick = { audioPicker.launch(arrayOf("audio/*")) }) { Icon(Icons.Rounded.MusicNote, null); Text("Ses +") }
             }
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth().horizontalScroll(timelineScrollState), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("00:00", color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall)
                 repeat(8) { i -> Text(timeLabel((i + 1) * 5000L), color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width((70 * zoom).dp)) }
             }
