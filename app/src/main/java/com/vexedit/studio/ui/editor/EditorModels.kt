@@ -14,7 +14,8 @@ data class EditorClip(
     val startMs: Long = 0L,
     val sourceInMs: Long = 0L,
     val sourceOutMs: Long = durationMs,
-    val volume: Float = 1f
+    val volume: Float = 1f,
+    val trackId: String = type.name
 ) {
     val visibleDurationMs: Long get() = (sourceOutMs - sourceInMs).coerceAtLeast(0L)
     val endMs: Long get() = startMs + visibleDurationMs
