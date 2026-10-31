@@ -186,23 +186,33 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().background(VexPalette.Background)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, "Back", tint = VexPalette.TextPrimary) }
-            Column(Modifier.weight(1f)) {
-                Text(project.name, color = VexPalette.TextPrimary, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                Text("${project.aspectRatio} • ${project.resolution} • ${project.fps} FPS", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
+        Row(
+            Modifier.fillMaxWidth().height(58.dp).background(VexPalette.Panel).padding(horizontal = 5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, "Geri", tint = VexPalette.TextPrimary) }
+            Text(project.name, color = VexPalette.TextPrimary, style = MaterialTheme.typography.titleMedium, maxLines = 1, modifier = Modifier.weight(1f))
+            IconButton(onClick = { undoStack.lastOrNull()?.let { previous -> redoStack.add(clips.toList()); undoStack.removeAt(undoStack.lastIndex); replaceAll(previous) } }, enabled = undoStack.isNotEmpty()) {
+                Icon(Icons.Rounded.Undo, "Geri al", tint = VexPalette.TextPrimary)
             }
-            IconButton(onClick = {
-                val clip = selected?.takeIf { it.type == EditorTrackType.VIDEO && it.uri != null }
-                    ?: clips.firstOrNull { it.type == EditorTrackType.VIDEO && it.uri != null }
-                clip?.uri?.let { exportController.exportSingleSource(it, project.name, clip.sourceInMs, clip.sourceOutMs) }
-            }, enabled = clips.any { it.type == EditorTrackType.VIDEO && it.uri != null } && !exportRunning) {
-                Icon(Icons.Rounded.FileDownload, "Export MP4", tint = VexPalette.Purple)
+            IconButton(onClick = { redoStack.lastOrNull()?.let { next -> undoStack.add(clips.toList()); redoStack.removeAt(redoStack.lastIndex); replaceAll(next) } }, enabled = redoStack.isNotEmpty()) {
+                Icon(Icons.Rounded.Redo, "Yinele", tint = VexPalette.TextPrimary)
             }
+            IconButton(onClick = { store.save(clips.toList()) }) { Icon(Icons.Rounded.Save, "Kaydet", tint = VexPalette.TextPrimary) }
+            Button(
+                onClick = {
+                    val clip = selected?.takeIf { it.type == EditorTrackType.VIDEO && it.uri != null }
+                        ?: clips.firstOrNull { it.type == EditorTrackType.VIDEO && it.uri != null }
+                    clip?.uri?.let { exportController.exportSingleSource(it, project.name, clip.sourceInMs, clip.sourceOutMs) }
+                },
+                enabled = clips.any { it.type == EditorTrackType.VIDEO && it.uri != null } && !exportRunning,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = VexPalette.Purple)
+            ) { Text("DIŞA AKTAR", maxLines = 1) }
         }
 
         Box(
-            Modifier.fillMaxWidth().weight(0.78f).background(VexPalette.BackgroundElevated),
+            Modifier.fillMaxWidth().weight(1.05f).background(Color.Black).padding(vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
             Box(
@@ -221,45 +231,51 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
             }
         }
 
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { if (player.isPlaying) player.pause() else player.play() }, enabled = activeVideo != null) {
-                    Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", tint = VexPalette.Purple)
-                }
-                Text("${timeLabel(playheadMs)} / ${timeLabel(timelineDuration)}", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
+        Row(
+            Modifier.fillMaxWidth().height(66.dp).background(VexPalette.Panel).padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(timecodePrecise(playheadMs), color = VexPalette.Purple, style = MaterialTheme.typography.titleSmall)
+            IconButton(onClick = { player.seekTo((player.currentPosition - 1000L).coerceAtLeast(0L)) }, enabled = activeVideo != null) {
+                Icon(Icons.Rounded.SkipPrevious, "Geri sar", tint = VexPalette.TextPrimary)
             }
-            Row {
-                listOf("Auto", "Low", "Mid", "High").forEach { q ->
-                    FilterChip(selected = previewQuality == q, onClick = { previewQuality = q }, label = { Text(q, maxLines = 1) })
-                }
+            FilledIconButton(
+                onClick = { if (player.isPlaying) player.pause() else player.play() },
+                enabled = activeVideo != null,
+                modifier = Modifier.size(58.dp),
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = VexPalette.Purple)
+            ) { Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Oynat", modifier = Modifier.size(30.dp)) }
+            IconButton(onClick = { player.seekTo(player.currentPosition + 1000L) }, enabled = activeVideo != null) {
+                Icon(Icons.Rounded.SkipNext, "İleri sar", tint = VexPalette.TextPrimary)
+            }
+            IconButton(onClick = { photoPicker.launch(arrayOf("image/*")) }) {
+                Icon(Icons.Rounded.AddPhotoAlternate, "Medya ekle", tint = VexPalette.Purple)
             }
         }
 
-        Slider(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            value = playheadMs.toFloat().coerceIn(0f, timelineDuration.toFloat()),
-            onValueChange = { value ->
-                playheadMs = value.toLong()
-                val clip = clips.filter { it.type == EditorTrackType.VIDEO && it.uri != null }
-                    .firstOrNull { playheadMs in it.startMs..it.endMs }
-                if (clip != null) {
-                    if (activeVideo != clip.uri) {
-                        activeVideo = clip.uri
-                        activePhoto = null
-                        player.setMediaItem(MediaItem.fromUri(clip.uri!!))
-                        player.prepare()
-                    }
-                    player.seekTo((clip.sourceInMs + playheadMs - clip.startMs).coerceAtLeast(0L))
-                } else if (selected?.type == EditorTrackType.VIDEO && selected.uri != null) {
-                    player.seekTo((selected.sourceInMs + playheadMs - selected.startMs).coerceIn(selected.sourceInMs, selected.sourceOutMs))
-                }
-            },
-            valueRange = 0f..timelineDuration.toFloat()
-        )
 
+
+        Row(
+            Modifier.fillMaxWidth().height(58.dp).background(VexPalette.Background).padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(onClick = { videoPicker.launch(arrayOf("video/*")) }, modifier = Modifier.weight(1.2f)) { Icon(Icons.Rounded.Add, null); Text("Medya Ekle", maxLines = 1) }
+            OutlinedButton(onClick = {
+                selected?.let { clip ->
+                    val pair = TimelineEngine.split(clip, playheadMs)
+                    if (pair != null) { snapshot(); val index = clips.indexOfFirst { it.id == clip.id }; clips[index] = pair.first; clips.add(index + 1, pair.second); selectedId = pair.second.id; store.save(clips.toList()) }
+                }
+            }, enabled = selected != null && playheadMs > (selected?.startMs ?: 0L) && playheadMs < (selected?.endMs ?: 0L), modifier = Modifier.weight(0.8f)) { Icon(Icons.Rounded.ContentCut, null); Text("Böl") }
+            OutlinedButton(onClick = {
+                selected?.let { clip -> snapshot(); val copy = clip.copy(id = UUID.randomUUID().toString(), name = clip.name + " Copy", startMs = clip.endMs); clips.add(copy); selectedId = copy.id; store.save(clips.toList()) }
+            }, enabled = selected != null, modifier = Modifier.weight(0.9f)) { Icon(Icons.Rounded.ContentCopy, null) }
+            OutlinedButton(onClick = { selected?.let { clip -> snapshot(); replaceAll(TimelineEngine.delete(clips.toList(), clip.id, gapMode)); selectedId = clips.firstOrNull()?.id } }, enabled = selected != null, modifier = Modifier.weight(0.65f)) { Icon(Icons.Rounded.Delete, null) }
+        }
         Column(Modifier.fillMaxWidth().weight(1.15f).background(VexPalette.Panel).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("TIMELINE", color = VexPalette.TextPrimary, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text("Timeline", color = VexPalette.TextPrimary, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 Text("Zoom", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
                 Slider(value = zoom, onValueChange = { zoom = it }, valueRange = 0.25f..1.5f, modifier = Modifier.width(100.dp))
                 TextButton(onClick = { gapMode = if (gapMode == TimelineGapMode.KEEP_GAP) TimelineGapMode.RIPPLE else TimelineGapMode.KEEP_GAP }) {
@@ -272,32 +288,36 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                     Icon(Icons.Rounded.Redo, "Redo", tint = if (redoStack.isNotEmpty()) VexPalette.TextPrimary else VexPalette.TextDisabled)
                 }
             }
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedButton(onClick = { videoPicker.launch(arrayOf("video/*")) }) { Icon(Icons.Rounded.VideoLibrary, null); Text("Video +") }
-                OutlinedButton(onClick = { photoPicker.launch(arrayOf("image/*")) }) { Icon(Icons.Rounded.Image, null); Text("Foto +") }
-                OutlinedButton(onClick = { audioPicker.launch(arrayOf("audio/*")) }) { Icon(Icons.Rounded.MusicNote, null); Text("Ses +") }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("KATMANLAR", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = { gapMode = if (gapMode == TimelineGapMode.KEEP_GAP) TimelineGapMode.RIPPLE else TimelineGapMode.KEEP_GAP }) { Text(if (gapMode == TimelineGapMode.KEEP_GAP) "Boşluk: Koru" else "Boşluk: Kapat") }
             }
-            Row(Modifier.fillMaxWidth().horizontalScroll(timelineScrollState), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("00:00", color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall)
-                repeat(8) { i -> Text(timeLabel((i + 1) * 5000L), color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width((360 * zoom).dp)) }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("TIME", color = VexPalette.TextDisabled, modifier = Modifier.width(72.dp), style = MaterialTheme.typography.labelSmall)
+                Row(Modifier.weight(1f).horizontalScroll(timelineScrollState), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("00:00", color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall)
+                    repeat(12) { i -> Text(timeLabel((i + 1) * 1000L), color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width((72 * zoom).dp)) }
+                }
             }
-            Column(Modifier.weight(1f).fillMaxWidth().horizontalScroll(timelineScrollState), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 EditorTrackType.entries.filter { type -> type != EditorTrackType.TEXT }.forEach { type ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            when (type) {
-                                EditorTrackType.VIDEO -> "Video 1"
-                                EditorTrackType.PHOTO -> "Overlay"
-                                EditorTrackType.MUSIC -> "Audio 1"
-                                EditorTrackType.VOICE -> "Audio 2"
-                                EditorTrackType.SFX -> "VFX"
-                                EditorTrackType.TEXT -> "Text"
-                            },
-                            color = trackColor(type),
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.width(62.dp),
-                            maxLines = 1
-                        )
+                        Column(Modifier.width(72.dp).height(58.dp).background(VexPalette.Background, RoundedCornerShape(5.dp)).padding(start = 7.dp), verticalArrangement = Arrangement.Center) {
+                            Text(
+                                when (type) {
+                                    EditorTrackType.VIDEO -> "Video 1"
+                                    EditorTrackType.PHOTO -> "Overlay"
+                                    EditorTrackType.MUSIC -> "Audio 1"
+                                    EditorTrackType.VOICE -> "Audio 2"
+                                    EditorTrackType.SFX -> "VFX"
+                                    EditorTrackType.TEXT -> "Text"
+                                },
+                                color = trackColor(type),
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1
+                            )
+                        }
+                        Box(Modifier.weight(1f).horizontalScroll(timelineScrollState)) {
                         TimelineClipLane(
                             trackType = type,
                             clips = clips,
@@ -334,6 +354,7 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                                 updateClip(clip.id) { TimelineEngine.trimEnd(it, sourceOut) }
                             }
                         )
+                        }
                     }
                 }
             }
@@ -377,13 +398,16 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
             }
         }
         Row(
-            Modifier.fillMaxWidth().background(VexPalette.Panel).padding(horizontal = 8.dp, vertical = 5.dp),
+            Modifier.fillMaxWidth().height(82.dp).background(VexPalette.Panel).padding(horizontal = 4.dp, vertical = 7.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = onBack) { Icon(Icons.Rounded.Home, null); Spacer(Modifier.width(4.dp)); Text("Ana Sayfa") }
-            TextButton(onClick = onBack) { Icon(Icons.Rounded.VideoLibrary, null); Spacer(Modifier.width(4.dp)); Text("Projeler") }
-            TextButton(onClick = onBack, enabled = false) { Icon(Icons.Rounded.Edit, null, tint = VexPalette.Purple); Spacer(Modifier.width(4.dp)); Text("Stüdyo", color = VexPalette.Purple) }
+            EditorToolItem(Icons.Rounded.Tune, "Düzenle", true) { }
+            EditorToolItem(Icons.Rounded.Speed, "Hız") { }
+            EditorToolItem(Icons.Rounded.VolumeUp, "Ses") { }
+            EditorToolItem(Icons.Rounded.AutoAwesome, "Efektler") { }
+            EditorToolItem(Icons.Rounded.Diamond, "Keyframe") { }
+            EditorToolItem(Icons.Rounded.Crop, "Kırp") { }
         }
     }
 
@@ -405,4 +429,30 @@ private fun trackColor(type: EditorTrackType): Color = when (type) {
     EditorTrackType.VOICE -> VexPalette.Voice
     EditorTrackType.SFX -> VexPalette.Sfx
     EditorTrackType.TEXT -> VexPalette.TextSecondary
+}
+
+
+@Composable
+private fun EditorToolItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    selected: Boolean = false,
+    onClick: () -> Unit
+) {
+    TextButton(onClick = onClick, modifier = Modifier.weight(1f), contentPadding = PaddingValues(2.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Icon(icon, contentDescription = label, tint = if (selected) VexPalette.Purple else VexPalette.TextSecondary, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.height(3.dp))
+            Text(label, color = if (selected) VexPalette.Purple else VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        }
+    }
+}
+
+private fun timecodePrecise(ms: Long): String {
+    val safe = ms.coerceAtLeast(0L)
+    val hours = safe / 3_600_000L
+    val minutes = (safe / 60_000L) % 60L
+    val seconds = (safe / 1_000L) % 60L
+    val frames = (safe % 1_000L) * 30L / 1_000L
+    return "%02d:%02d:%02d:%02d".format(hours, minutes, seconds, frames)
 }
