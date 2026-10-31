@@ -107,13 +107,13 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)\nprivate fun VexStudioApp(viewModel: ProjectViewModel) {
+private fun VexStudioApp(viewModel: ProjectViewModel) {
     var destination by remember { mutableStateOf(AppDestination.HOME) }
     var showCreate by remember { mutableStateOf(false) }
     var layout by remember { mutableStateOf(ProjectLayout.GRID) }
     var search by remember { mutableStateOf("") }
-    var selectedProject by remember { mutableStateOf<ProjectEntity?>(null) }
     var renameTarget by remember { mutableStateOf<ProjectEntity?>(null) }
     var openedProject by remember { mutableStateOf<ProjectEntity?>(null) }
     val projects by viewModel.projects.collectAsState()
@@ -135,7 +135,7 @@ class MainActivity : ComponentActivity() {
                 },
                 actions = {
                     if (destination == AppDestination.PROJECTS) {
-                        TextButton(onClick = { destination = AppDestination.SETTINGS }) {
+                        TextButton(onClick = { destination = AppDestination.TRASH }) {
                             Icon(Icons.Rounded.Delete, contentDescription = "Çöp kutusu", tint = VexPalette.TextSecondary)
                         }
                     }
@@ -155,7 +155,8 @@ class MainActivity : ComponentActivity() {
                                 AppDestination.PROJECTS -> Icon(Icons.Rounded.FolderOpen, contentDescription = item.label)
                                 AppDestination.CREATE -> Icon(Icons.Rounded.Add, contentDescription = item.label)
                                 AppDestination.AUDIO -> Icon(Icons.Rounded.AudioFile, contentDescription = item.label)
-                                AppDestination.SETTINGS -> Icon(Icons.Rounded.Settings, contentDescription = item.label)\n                                AppDestination.TRASH -> Icon(Icons.Rounded.Delete, contentDescription = item.label)
+                                AppDestination.SETTINGS -> Icon(Icons.Rounded.Settings, contentDescription = item.label)
+                                AppDestination.TRASH -> Icon(Icons.Rounded.Delete, contentDescription = item.label)
                             }
                         },
                         label = { Text(item.label, maxLines = 1) },
@@ -198,7 +199,8 @@ class MainActivity : ComponentActivity() {
                 onTrashOpen = { destination = AppDestination.TRASH }
             )
             AppDestination.AUDIO -> PlaceholderScreen("Audio Studio", "Ses düzenleme araçları sonraki geliştirme aşamasında.", padding)
-            AppDestination.SETTINGS -> TrashScreen(
+            AppDestination.SETTINGS -> PlaceholderScreen("Ayarlar", "Depolama konumu ve manuel yedekleme ayarları sıradaki aşamada eklenecek.", padding)
+            AppDestination.TRASH -> TrashScreen(
                 projects = trash,
                 padding = padding,
                 onRestore = { viewModel.restore(it.id) },
