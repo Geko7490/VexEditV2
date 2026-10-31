@@ -1,5 +1,6 @@
 package com.vexedit.studio
 
+import androidx.compose.ui.graphics.toArgb
 import com.vexedit.studio.ui.theme.VexDimensions
 import com.vexedit.studio.ui.theme.VexPalette
 import org.junit.Assert.assertEquals
@@ -14,9 +15,9 @@ class ProjectConfigurationTest {
 
     @Test
     fun vexBrandPaletteUsesExpectedColors() {
-        assertEquals(0xFFA855F7.toInt(), VexPalette.Purple.value.toLong().toInt())
-        assertEquals(0xFF0F0F13.toInt(), VexPalette.Background.value.toLong().toInt())
-        assertEquals(0xFF1C1B23.toInt(), VexPalette.Panel.value.toLong().toInt())
+        assertEquals(0xFFA855F7.toInt(), VexPalette.Purple.toArgb())
+        assertEquals(0xFF0F0F13.toInt(), VexPalette.Background.toArgb())
+        assertEquals(0xFF1C1B23.toInt(), VexPalette.Panel.toArgb())
     }
 
     @Test
