@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -485,21 +487,42 @@ private fun NewProjectDialog(onDismiss: () -> Unit, onCreate: (String, String, S
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Proje adı") }, singleLine = true)
                 Text("En-boy oranı", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     listOf("16:9", "9:16", "1:1", "4:5").forEach { value ->
-                        FilterChip(selected = ratio == value, onClick = { ratio = value }, label = { Text(value) })
+                        FilterChip(
+                            selected = ratio == value,
+                            onClick = { ratio = value },
+                            label = { Text(value, style = MaterialTheme.typography.bodySmall, maxLines = 1) }
+                        )
                     }
                 }
                 Text("Çözünürlük", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     listOf("480p", "720p", "1080p", "2K", "4K").forEach { value ->
-                        FilterChip(selected = resolution == value, onClick = { resolution = value }, label = { Text(value) })
+                        FilterChip(
+                            selected = resolution == value,
+                            onClick = { resolution = value },
+                            label = { Text(value, style = MaterialTheme.typography.bodySmall, maxLines = 1) }
+                        )
                     }
                 }
                 Text("Kare hızı", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     listOf(15, 24, 30, 60, 120).forEach { value ->
-                        FilterChip(selected = fps == value, onClick = { fps = value }, label = { Text("$value FPS") })
+                        FilterChip(
+                            selected = fps == value,
+                            onClick = { fps = value },
+                            label = { Text("$value FPS", style = MaterialTheme.typography.bodySmall, maxLines = 1) }
+                        )
                     }
                 }
                 Text("Bu ayarlar proje hedefidir; dışa aktarma cihaz desteğine göre doğrulanır.", color = VexPalette.TextSecondary, style = MaterialTheme.typography.bodySmall)
