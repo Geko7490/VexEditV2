@@ -1,55 +1,22 @@
 package com.vexedit.studio.ui.editor
 
 import android.net.Uri
+import android.widget.ImageView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.ContentCut
-import androidx.compose.material.icons.rounded.FileDownload
-import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.VideoLibrary
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -60,186 +27,254 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.vexedit.studio.data.project.ProjectEntity
 import com.vexedit.studio.ui.theme.VexPalette
+import kotlinx.coroutines.delay
 import java.util.Locale
+import java.util.UUID
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
     val context = LocalContext.current
+    val store = remember(project.id) { TimelineStore(context, project.id) }
+    val clips = remember(project.id) { mutableStateListOf<EditorClip>().apply { addAll(store.load()) } }
     val player = remember { ExoPlayer.Builder(context).build() }
-    val clips = remember { mutableStateListOf<EditorClip>() }
-    var selectedId by remember { mutableStateOf<String?>(null) }
+    var selectedId by remember { mutableStateOf(clips.firstOrNull()?.id) }
     var activeVideo by remember { mutableStateOf<Uri?>(null) }
+    var activePhoto by remember { mutableStateOf<Uri?>(null) }
     var duration by remember { mutableLongStateOf(0L) }
-    var position by remember { mutableLongStateOf(0L) }
+    var playerPosition by remember { mutableLongStateOf(0L) }
+    var playheadMs by remember { mutableLongStateOf(0L) }
     var playing by remember { mutableStateOf(false) }
-    var previewQuality by remember { mutableStateOf("Auto") }
+    var zoom by remember { mutableFloatStateOf(0.65f) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
     var exportRunning by remember { mutableStateOf(false) }
-    var audioVolume by remember { mutableFloatStateOf(1f) }
-    var trimStart by remember { mutableLongStateOf(0L) }
-    var trimEnd by remember { mutableLongStateOf(0L) }
-
+    var previewQuality by remember { mutableStateOf("Auto") }
+    val undoStack = remember { mutableStateListOf<List<EditorClip>>() }
+    val redoStack = remember { mutableStateListOf<List<EditorClip>>() }
     val selected = clips.firstOrNull { it.id == selectedId }
-    val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            runCatching { context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-            activeVideo = uri
-            player.setMediaItem(MediaItem.fromUri(uri))
-            player.prepare()
-            player.playWhenReady = false
-            val name = uri.lastPathSegment?.substringAfterLast('/') ?: "Video"
-            val clip = EditorClip(name = name, uri = uri, type = EditorTrackType.VIDEO, durationMs = 0L, sourceOutMs = 0L)
-            clips.add(clip)
-            selectedId = clip.id
+    val timelineDuration = (clips.maxOfOrNull { it.endMs } ?: 0L).coerceAtLeast(1000L)
+
+    fun snapshot() {
+        undoStack.add(clips.toList())
+        if (undoStack.size > 40) undoStack.removeAt(0)
+        redoStack.clear()
+    }
+    fun replaceAll(items: List<EditorClip>) {
+        clips.clear()
+        clips.addAll(items)
+        store.save(items)
+        if (selectedId !in clips.map { it.id }) selectedId = clips.firstOrNull()?.id
+    }
+    fun updateClip(id: String, transform: (EditorClip) -> EditorClip) {
+        val index = clips.indexOfFirst { it.id == id }
+        if (index >= 0) {
+            snapshot()
+            clips[index] = transform(clips[index])
+            store.save(clips.toList())
         }
     }
-    val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            runCatching { context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-            val clip = EditorClip(
-                name = uri.lastPathSegment?.substringAfterLast('/') ?: "Audio",
-                uri = uri,
-                type = EditorTrackType.MUSIC,
-                durationMs = 180_000L,
-                sourceOutMs = 180_000L
-            )
-            clips.add(clip)
-            selectedId = clip.id
+    fun moveClip(id: String, direction: Int) {
+        val index = clips.indexOfFirst { it.id == id }
+        if (index < 0) return
+        val sameTrack = clips.withIndex().filter { it.value.type == clips[index].type }
+        val localIndex = sameTrack.indexOfFirst { it.value.id == id }
+        val target = localIndex + direction
+        if (target !in sameTrack.indices) return
+        snapshot()
+        val otherIndex = sameTrack[target].index
+        val a = clips[index]
+        val b = clips[otherIndex]
+        clips[index] = a.copy(startMs = b.startMs)
+        clips[otherIndex] = b.copy(startMs = a.startMs)
+        store.save(clips.toList())
+    }
+    fun addMedia(uri: Uri, type: EditorTrackType, name: String) {
+        runCatching { context.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        snapshot()
+        val clipDuration = if (type == EditorTrackType.PHOTO) 5000L else if (type == EditorTrackType.MUSIC || type == EditorTrackType.VOICE || type == EditorTrackType.SFX) 180000L else 0L
+        val trackEnd = clips.filter { it.type == type }.maxOfOrNull { it.endMs } ?: 0L
+        val clip = EditorClip(name = name, uri = uri, type = type, durationMs = clipDuration, startMs = trackEnd, sourceOutMs = clipDuration)
+        clips.add(clip)
+        selectedId = clip.id
+        store.save(clips.toList())
+        when (type) {
+            EditorTrackType.VIDEO -> {
+                activeVideo = uri
+                activePhoto = null
+                player.setMediaItem(MediaItem.fromUri(uri))
+                player.prepare()
+                player.pause()
+            }
+            EditorTrackType.PHOTO -> {
+                activePhoto = uri
+                activeVideo = null
+                player.pause()
+            }
+            else -> Unit
         }
+    }
+
+    val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        uris.forEach { uri -> addMedia(uri, EditorTrackType.VIDEO, uri.lastPathSegment?.substringAfterLast('/') ?: "Video") }
+    }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        uris.forEach { uri -> addMedia(uri, EditorTrackType.PHOTO, uri.lastPathSegment?.substringAfterLast('/') ?: "Photo") }
+    }
+    val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        uris.forEach { uri -> addMedia(uri, EditorTrackType.MUSIC, uri.lastPathSegment?.substringAfterLast('/') ?: "Audio") }
     }
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY) {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY) {
                     duration = player.duration.coerceAtLeast(0L)
-                    clips.indices.firstOrNull { clips[it].uri == activeVideo }?.let { index ->
-                        val old = clips[index]
-                        if (old.durationMs == 0L && duration > 0L) clips[index] = old.copy(durationMs = duration, sourceOutMs = duration)
+                    activeVideo?.let { uri ->
+                        val index = clips.indexOfFirst { it.uri == uri && it.type == EditorTrackType.VIDEO }
+                        if (index >= 0 && clips[index].durationMs == 0L && duration > 0L) {
+                            val updated = clips[index].copy(durationMs = duration, sourceOutMs = duration)
+                            clips[index] = updated
+                            store.save(clips.toList())
+                        }
                     }
-                    if (trimEnd == 0L && duration > 0L) trimEnd = duration
                 }
             }
         }
         player.addListener(listener)
-        onDispose {
-            player.removeListener(listener)
-            player.release()
+        onDispose { player.removeListener(listener); player.release() }
+    }
+    LaunchedEffect(player) {
+        while (true) {
+            if (player.isPlaying) {
+                playerPosition = player.currentPosition.coerceAtLeast(0L)
+                val clip = clips.firstOrNull { it.uri == activeVideo && it.type == EditorTrackType.VIDEO }
+                playheadMs = (clip?.startMs ?: 0L) + (playerPosition - (clip?.sourceInMs ?: 0L)).coerceAtLeast(0L)
+            }
+            delay(100)
         }
     }
-
-    LaunchedEffect(player, activeVideo) {
-        while (true) {
-            if (player.isPlaying) position = player.currentPosition.coerceAtLeast(0L)
-            kotlinx.coroutines.delay(120)
-        }
+    LaunchedEffect(clips.toList()) {
+        delay(250)
+        store.save(clips.toList())
     }
 
     val exportController = remember {
-        ExportController(context) { running, message ->
-            exportRunning = running
-            exportMessage = message
-        }
+        ExportController(context) { running, message -> exportRunning = running; exportMessage = message }
     }
 
     Column(Modifier.fillMaxSize().background(VexPalette.Background)) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = "Geri", tint = VexPalette.TextPrimary) }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, "Back", tint = VexPalette.TextPrimary) }
             Column(Modifier.weight(1f)) {
                 Text(project.name, color = VexPalette.TextPrimary, style = MaterialTheme.typography.titleMedium, maxLines = 1)
                 Text("${project.aspectRatio} • ${project.resolution} • ${project.fps} FPS", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
             }
             IconButton(onClick = {
-                val exportClip = selected?.takeIf { it.type == EditorTrackType.VIDEO && it.uri != null }
+                val clip = selected?.takeIf { it.type == EditorTrackType.VIDEO && it.uri != null }
                     ?: clips.firstOrNull { it.type == EditorTrackType.VIDEO && it.uri != null }
-                exportClip?.uri?.let { exportController.exportSingleSource(it, project.name, exportClip.sourceInMs, exportClip.sourceOutMs) }
+                clip?.uri?.let { exportController.exportSingleSource(it, project.name, clip.sourceInMs, clip.sourceOutMs) }
             }, enabled = clips.any { it.type == EditorTrackType.VIDEO && it.uri != null } && !exportRunning) {
-                Icon(Icons.Rounded.FileDownload, contentDescription = "MP4 dışa aktar", tint = VexPalette.Purple)
+                Icon(Icons.Rounded.FileDownload, "Export MP4", tint = VexPalette.Purple)
             }
         }
 
-        Box(
-            Modifier.fillMaxWidth().weight(1f).padding(horizontal = 12.dp)
-                .background(Color.Black, RoundedCornerShape(8.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            if (activeVideo != null) {
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { ctx -> PlayerView(ctx).apply { this.player = player; useController = true } },
-                    update = { it.player = player }
-                )
-            } else {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Rounded.VideoLibrary, contentDescription = null, tint = VexPalette.Purple)
-                    Text("Önizleme için video ekle", color = Color.White)
-                    Button(onClick = { videoPicker.launch(arrayOf("video/*")) }) { Text("Video seç") }
+        Box(Modifier.fillMaxWidth().weight(0.85f).padding(horizontal = 12.dp).background(Color.Black, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+            when {
+                activeVideo != null -> AndroidView(Modifier.fillMaxSize(), factory = { PlayerView(it).apply { this.player = player; useController = false } }, update = { it.player = player })
+                activePhoto != null -> AndroidView(Modifier.fillMaxSize(), factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER; setImageURI(activePhoto) } }, update = { it.setImageURI(activePhoto) })
+                else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Rounded.VideoLibrary, null, tint = VexPalette.Purple)
+                    Text("Videolarını veya fotoğraflarını ekle", color = Color.White)
                 }
             }
         }
 
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { if (player.isPlaying) player.pause() else player.play() }, enabled = activeVideo != null) {
-                    Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, contentDescription = "Oynat", tint = VexPalette.Purple)
+                    Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, "Play/Pause", tint = VexPalette.Purple)
                 }
-                Text("${timeLabel(position)} / ${timeLabel(duration)}", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
+                Text("${timeLabel(playheadMs)} / ${timeLabel(timelineDuration)}", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row {
                 listOf("Auto", "Low", "Mid", "High").forEach { q ->
-                    FilterChip(selected = previewQuality == q, onClick = { previewQuality = q }, label = { Text(q) })
+                    FilterChip(selected = previewQuality == q, onClick = { previewQuality = q }, label = { Text(q, maxLines = 1) })
                 }
             }
         }
 
-        if (duration > 0L) {
-            Slider(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                value = (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f),
-                onValueChange = { player.seekTo((it * duration).toLong()) },
-                valueRange = 0f..1f
-            )
-        }
+        Slider(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            value = playheadMs.toFloat().coerceIn(0f, timelineDuration.toFloat()),
+            onValueChange = { value ->
+                playheadMs = value.toLong()
+                val clip = clips.filter { it.type == EditorTrackType.VIDEO && it.uri != null }
+                    .firstOrNull { playheadMs in it.startMs..it.endMs }
+                if (clip != null) {
+                    if (activeVideo != clip.uri) {
+                        activeVideo = clip.uri
+                        activePhoto = null
+                        player.setMediaItem(MediaItem.fromUri(clip.uri!!))
+                        player.prepare()
+                    }
+                    player.seekTo((clip.sourceInMs + playheadMs - clip.startMs).coerceAtLeast(0L))
+                } else if (selected?.type == EditorTrackType.VIDEO && selected.uri != null) {
+                    player.seekTo((selected.sourceInMs + playheadMs - selected.startMs).coerceIn(selected.sourceInMs, selected.sourceOutMs))
+                }
+            },
+            valueRange = 0f..timelineDuration.toFloat()
+        )
 
-        Column(
-            Modifier.fillMaxWidth().weight(1.15f).background(VexPalette.Panel).padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("TIMELINE", color = VexPalette.TextPrimary, style = MaterialTheme.typography.titleSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedButton(onClick = { videoPicker.launch(arrayOf("video/*")) }) { Icon(Icons.Rounded.VideoLibrary, null); Text("Video") }
-                    OutlinedButton(onClick = { audioPicker.launch(arrayOf("audio/*")) }) { Icon(Icons.Rounded.MusicNote, null); Text("Ses") }
+        Column(Modifier.fillMaxWidth().weight(1.15f).background(VexPalette.Panel).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("TIMELINE", color = VexPalette.TextPrimary, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text("Zoom", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
+                Slider(value = zoom, onValueChange = { zoom = it }, valueRange = 0.25f..1.5f, modifier = Modifier.width(100.dp))
+                IconButton(onClick = { undoStack.lastOrNull()?.let { previous -> redoStack.add(clips.toList()); undoStack.removeAt(undoStack.lastIndex); replaceAll(previous) } }, enabled = undoStack.isNotEmpty()) {
+                    Icon(Icons.Rounded.Undo, "Undo", tint = if (undoStack.isNotEmpty()) VexPalette.TextPrimary else VexPalette.TextDisabled)
+                }
+                IconButton(onClick = { redoStack.lastOrNull()?.let { next -> undoStack.add(clips.toList()); redoStack.removeAt(redoStack.lastIndex); replaceAll(next) } }, enabled = redoStack.isNotEmpty()) {
+                    Icon(Icons.Rounded.Redo, "Redo", tint = if (redoStack.isNotEmpty()) VexPalette.TextPrimary else VexPalette.TextDisabled)
                 }
             }
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(EditorTrackType.VIDEO, EditorTrackType.PHOTO, EditorTrackType.MUSIC, EditorTrackType.VOICE, EditorTrackType.SFX).forEach { type ->
-                    val trackClips = clips.filter { it.type == type }
-                    Column(Modifier.width(250.dp).background(VexPalette.Background, RoundedCornerShape(6.dp)).padding(8.dp)) {
-                        Text(type.name, color = trackColor(type), style = MaterialTheme.typography.labelSmall)
-                        Spacer(Modifier.height(6.dp))
-                        if (trackClips.isEmpty()) {
-                            Box(Modifier.fillMaxWidth().height(42.dp), contentAlignment = Alignment.CenterStart) {
-                                Text("Klip eklemek için üstteki araçları kullan", color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall)
-                            }
-                        } else {
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                trackClips.forEach { clip ->
-                                    Card(
-                                        onClick = { selectedId = clip.id },
-                                        colors = CardDefaults.cardColors(containerColor = if (selectedId == clip.id) VexPalette.PurpleTint else VexPalette.PanelElevated),
-                                        shape = RoundedCornerShape(5.dp)
-                                    ) {
-                                        Text(clip.name.take(18), Modifier.padding(8.dp), color = VexPalette.TextPrimary, style = MaterialTheme.typography.labelSmall)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(onClick = { videoPicker.launch(arrayOf("video/*")) }) { Icon(Icons.Rounded.VideoLibrary, null); Text("Video +") }
+                OutlinedButton(onClick = { photoPicker.launch(arrayOf("image/*")) }) { Icon(Icons.Rounded.Image, null); Text("Foto +") }
+                OutlinedButton(onClick = { audioPicker.launch(arrayOf("audio/*")) }) { Icon(Icons.Rounded.MusicNote, null); Text("Ses +") }
+            }
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("00:00", color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall)
+                repeat(8) { i -> Text(timeLabel((i + 1) * 5000L), color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width((70 * zoom).dp)) }
+            }
+            Column(Modifier.weight(1f).fillMaxWidth().horizontalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                EditorTrackType.entries.filter { type -> type != EditorTrackType.TEXT }.forEach { type ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(type.name, color = trackColor(type), style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(62.dp))
+                        Row(Modifier.width((timelineDuration / 1000f * 14f * zoom).coerceAtLeast(240f).dp).height(48.dp).background(VexPalette.Background, RoundedCornerShape(5.dp)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                            clips.filter { it.type == type }.sortedBy { it.startMs }.forEach { clip ->
+                                val width = (clip.visibleDurationMs / 1000f * 14f * zoom).coerceIn(52f, 320f)
+                                var dragDistance by remember(clip.id) { mutableFloatStateOf(0f) }
+                                Card(
+                                    modifier = Modifier.width(width.dp).fillMaxHeight().pointerInput(clip.id) {
+                                        detectDragGestures(
+                                            onDragEnd = {
+                                                if (dragDistance > 35f) moveClip(clip.id, 1)
+                                                if (dragDistance < -35f) moveClip(clip.id, -1)
+                                                dragDistance = 0f
+                                            },
+                                            onDragCancel = { dragDistance = 0f },
+                                            onDrag = { change, amount -> change.consume(); dragDistance += amount.x }
+                                        )
+                                    },
+                                    onClick = { selectedId = clip.id; playheadMs = clip.startMs },
+                                    colors = CardDefaults.cardColors(containerColor = if (selectedId == clip.id) VexPalette.PurpleTint else trackColor(type).copy(alpha = 0.25f)),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Column(Modifier.fillMaxSize().padding(horizontal = 5.dp, vertical = 3.dp), verticalArrangement = Arrangement.Center) {
+                                        Text(clip.name.take(14), color = VexPalette.TextPrimary, maxLines = 1, style = MaterialTheme.typography.labelSmall)
+                                        Text(timeLabel(clip.visibleDurationMs), color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
                             }
@@ -247,62 +282,49 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                     }
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(
-                    onClick = {
-                        val clip = selected
-                        if (clip != null && clip.type == EditorTrackType.VIDEO && position > clip.sourceInMs && position < clip.sourceOutMs) {
-                            val index = clips.indexOfFirst { it.id == clip.id }
-                            if (index >= 0) {
-                                clips[index] = clip.copy(sourceOutMs = position)
-                                clips.add(index + 1, clip.copy(id = java.util.UUID.randomUUID().toString(), name = clip.name + " (2)", startMs = position, sourceInMs = position))
-                            }
-                        }
-                    },
-                    enabled = selected?.type == EditorTrackType.VIDEO && position > selected.sourceInMs && position < selected.sourceOutMs
-                ) { Icon(Icons.Rounded.ContentCut, null); Text("Split") }
-                OutlinedButton(onClick = {
-                    selected?.let { clip ->
-                        if (clip.type == EditorTrackType.VIDEO) {
-                            val index = clips.indexOfFirst { it.id == clip.id }
-                            if (index >= 0) clips[index] = clip.copy(sourceInMs = position.coerceIn(0L, clip.sourceOutMs))
-                        }
-                    }
-                }, enabled = selected?.type == EditorTrackType.VIDEO) { Text("In") }
-                OutlinedButton(onClick = {
-                    selected?.let { clip ->
-                        if (clip.type == EditorTrackType.VIDEO) {
-                            val index = clips.indexOfFirst { it.id == clip.id }
-                            if (index >= 0) clips[index] = clip.copy(sourceOutMs = position.coerceIn(clip.sourceInMs, clip.durationMs))
-                        }
-                    }
-                }, enabled = selected?.type == EditorTrackType.VIDEO) { Text("Out") }
-                OutlinedButton(onClick = {
-                    selected?.let { clip -> clips.removeAll { it.id == clip.id }; if (selectedId == clip.id) selectedId = null }
-                }, enabled = selected != null) { Text("Sil") }
-            }
             if (selected != null) {
                 Text("Seçili: ${selected.name} • ${timeLabel(selected.visibleDurationMs)}", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    OutlinedButton(onClick = {
+                        val splitAt = (playheadMs - selected.startMs + selected.sourceInMs).coerceIn(selected.sourceInMs, selected.sourceOutMs)
+                        if (splitAt > selected.sourceInMs && splitAt < selected.sourceOutMs) {
+                            snapshot()
+                            val index = clips.indexOfFirst { it.id == selected.id }
+                            clips[index] = selected.copy(sourceOutMs = splitAt)
+                            val second = selected.copy(id = UUID.randomUUID().toString(), name = selected.name + " (2)", startMs = playheadMs, sourceInMs = splitAt)
+                            clips.add(index + 1, second)
+                            selectedId = second.id
+                            store.save(clips.toList())
+                        }
+                    }, enabled = selected.type == EditorTrackType.VIDEO && playheadMs > selected.startMs && playheadMs < selected.endMs) { Icon(Icons.Rounded.ContentCut, null); Text("Böl") }
+                    OutlinedButton(onClick = { updateClip(selected.id) { it.copy(sourceInMs = (it.sourceInMs + (playheadMs - it.startMs).coerceAtLeast(0L)).coerceAtMost(it.sourceOutMs - 250L)) } }, enabled = selected.type == EditorTrackType.VIDEO && playheadMs > selected.startMs) { Text("Baştan kırp") }
+                    OutlinedButton(onClick = { updateClip(selected.id) { it.copy(sourceOutMs = (it.sourceInMs + (playheadMs - it.startMs)).coerceIn(it.sourceInMs + 250L, it.durationMs)) } }, enabled = selected.type == EditorTrackType.VIDEO && playheadMs < selected.endMs) { Text("Sondan kırp") }
+                    OutlinedButton(onClick = { updateClip(selected.id) { it.copy(startMs = (it.startMs - 500L).coerceAtLeast(0L)) } }) { Text("← 0.5s") }
+                    OutlinedButton(onClick = { updateClip(selected.id) { it.copy(startMs = it.startMs + 500L) } }) { Text("0.5s →") }
+                    OutlinedButton(onClick = {
+                        snapshot()
+                        val copy = selected.copy(id = UUID.randomUUID().toString(), name = selected.name + " Copy", startMs = selected.endMs)
+                        clips.add(copy); selectedId = copy.id; store.save(clips.toList())
+                    }) { Icon(Icons.Rounded.ContentCopy, null); Text("Çoğalt") }
+                    OutlinedButton(onClick = { snapshot(); clips.removeAll { it.id == selected.id }; selectedId = clips.firstOrNull()?.id; store.save(clips.toList()) }) { Icon(Icons.Rounded.Delete, null); Text("Sil") }
+                }
                 if (selected.type == EditorTrackType.MUSIC || selected.type == EditorTrackType.VOICE || selected.type == EditorTrackType.SFX) {
-                    Text("Ses seviyesi: ${(audioVolume * 100).toInt()}%", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
+                    Text("Ses seviyesi ${(selected.volume * 100).roundToInt()}%", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
                     Slider(value = selected.volume, onValueChange = { value ->
-                        audioVolume = value
                         val index = clips.indexOfFirst { it.id == selected.id }
-                        if (index >= 0) clips[index] = clips[index].copy(volume = value)
+                        if (index >= 0) { clips[index] = clips[index].copy(volume = value); store.save(clips.toList()) }
                     }, valueRange = 0f..1f)
                 }
+            } else {
+                Text("Klip seç: sürükleyerek aynı kanalda sırala. Kırpma ve bölme araçları seçili klibe uygulanır.", color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall)
             }
-            Text("Önizleme kalitesi seçimi arayüzü hazır; cihaz/codec tabanlı gerçek kalite profilleri sonraki optimizasyon adımında uygulanacak.", color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall)
         }
     }
 
     exportMessage?.let { message ->
-        AlertDialog(
-            onDismissRequest = { if (!exportRunning) exportMessage = null },
-            title = { Text(if (exportRunning) "Dışa aktarılıyor" else "MP4 Export") },
-            text = { Text(message) },
-            confirmButton = { TextButton(onClick = { if (exportRunning) exportController.cancel() else exportMessage = null }) { Text(if (exportRunning) "İptal" else "Tamam") } }
-        )
+        AlertDialog(onDismissRequest = { if (!exportRunning) exportMessage = null }, title = { Text(if (exportRunning) "Dışa aktarılıyor" else "MP4 Export") }, text = { Text(message) }, confirmButton = {
+            TextButton(onClick = { if (exportRunning) exportController.cancel() else exportMessage = null }) { Text(if (exportRunning) "İptal" else "Tamam") }
+        })
     }
 }
 
