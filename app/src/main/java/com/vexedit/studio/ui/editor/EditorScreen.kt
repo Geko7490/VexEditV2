@@ -298,7 +298,7 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                 Text("KATMANLAR", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
                 TextButton(onClick = { gapMode = if (gapMode == TimelineGapMode.KEEP_GAP) TimelineGapMode.RIPPLE else TimelineGapMode.KEEP_GAP }) { Text(if (gapMode == TimelineGapMode.KEEP_GAP) "Boşluk: Koru" else "Boşluk: Kapat") }
             }
-            val timelineContentWidth = (timelineDuration / 1000f * 72f * zoom).coerceAtLeast(280f)
+            val timelineContentWidth = ((timelineDuration / 1000f + 2f) * 72f * zoom).coerceAtLeast(280f)
 
             Row(
                 Modifier.fillMaxWidth().weight(1f),
@@ -369,7 +369,7 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                                 clips = clips,
                                 selectedId = selectedId,
                                 zoom = zoom,
-                                timelineDurationMs = timelineDuration,
+                                timelineDurationMs = timelineDuration + 2000L,
                                 playheadMs = playheadMs,
                                 onSelect = { clip ->
                                     selectedId = clip.id
