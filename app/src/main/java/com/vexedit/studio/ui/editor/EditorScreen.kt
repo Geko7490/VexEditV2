@@ -439,7 +439,7 @@ private fun EditorToolItem(
     selected: Boolean = false,
     onClick: () -> Unit
 ) {
-    TextButton(onClick = onClick, modifier = Modifier.weight(1f), contentPadding = PaddingValues(2.dp)) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxHeight().width(58.dp), contentPadding = PaddingValues(2.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Icon(icon, contentDescription = label, tint = if (selected) VexPalette.Purple else VexPalette.TextSecondary, modifier = Modifier.size(24.dp))
             Spacer(Modifier.height(3.dp))
