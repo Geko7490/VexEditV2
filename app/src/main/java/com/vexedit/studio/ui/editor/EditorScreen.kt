@@ -201,13 +201,22 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
             }
         }
 
-        Box(Modifier.fillMaxWidth().weight(0.85f).padding(horizontal = 12.dp).background(Color.Black, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-            when {
-                activeVideo != null -> AndroidView(factory = { ctx -> PlayerView(ctx).apply { this.player = player; useController = false } }, modifier = Modifier.fillMaxSize(), update = { view -> view.player = player })
-                activePhoto != null -> AndroidView(factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER; setImageURI(activePhoto) } }, modifier = Modifier.fillMaxSize(), update = { view -> view.setImageURI(activePhoto) })
-                else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Rounded.VideoLibrary, null, tint = VexPalette.Purple)
-                    Text("Videolarını veya fotoğraflarını ekle", color = Color.White)
+        Box(
+            Modifier.fillMaxWidth().weight(0.78f).background(VexPalette.BackgroundElevated),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                Modifier.fillMaxHeight().aspectRatio(9f / 16f)
+                    .background(Color.Black, RoundedCornerShape(8.dp))
+            ) {
+                when {
+                    activeVideo != null -> AndroidView(factory = { ctx -> PlayerView(ctx).apply { this.player = player; useController = false; resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT } }, modifier = Modifier.fillMaxSize(), update = { view -> view.player = player })
+                    activePhoto != null -> AndroidView(factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER; setImageURI(activePhoto) } }, modifier = Modifier.fillMaxSize(), update = { view -> view.setImageURI(activePhoto) })
+                    else -> Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        Icon(Icons.Rounded.VideoLibrary, null, tint = VexPalette.Purple)
+                        Text("Video veya fotoğraf ekle", color = Color.White)
+                        Text("9:16 önizleme", color = VexPalette.TextSecondary, style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
         }
@@ -275,7 +284,20 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
             Column(Modifier.weight(1f).fillMaxWidth().horizontalScroll(timelineScrollState), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 EditorTrackType.entries.filter { type -> type != EditorTrackType.TEXT }.forEach { type ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(type.name, color = trackColor(type), style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(62.dp))
+                        Text(
+                            when (type) {
+                                EditorTrackType.VIDEO -> "Video 1"
+                                EditorTrackType.PHOTO -> "Overlay"
+                                EditorTrackType.MUSIC -> "Audio 1"
+                                EditorTrackType.VOICE -> "Audio 2"
+                                EditorTrackType.SFX -> "VFX"
+                                EditorTrackType.TEXT -> "Text"
+                            },
+                            color = trackColor(type),
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.width(62.dp),
+                            maxLines = 1
+                        )
                         TimelineClipLane(
                             trackType = type,
                             clips = clips,
@@ -286,8 +308,21 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
                             onSelect = { clip -> selectedId = clip.id; playheadMs = clip.startMs },
                             onMove = { clip, proposedStart ->
                                 val candidates = TimelineEngine.snapCandidates(clips.filterNot { it.id == clip.id }, playheadMs)
-                                val snapped = TimelineEngine.snap(proposedStart, candidates, 180L)
+                                val snapped = TimelineEngine.snap(proposedStart, candidates, (10000f / (72f * zoom)).toLong().coerceAtLeast(30L))
                                 updateClip(clip.id) { TimelineEngine.move(it, snapped.positionMs) }
+                            },
+                            onDragPreview = { clip, proposedStart ->
+                                val previewPosition = proposedStart.coerceAtLeast(0L)
+                                playheadMs = previewPosition
+                                if (clip.type == EditorTrackType.VIDEO && clip.uri != null) {
+                                    if (activeVideo != clip.uri) {
+                                        activeVideo = clip.uri
+                                        activePhoto = null
+                                        player.setMediaItem(MediaItem.fromUri(clip.uri))
+                                        player.prepare()
+                                    }
+                                    player.seekTo((clip.sourceInMs + (previewPosition - proposedStart).coerceAtLeast(0L)).coerceIn(clip.sourceInMs, clip.sourceOutMs))
+                                }
                             },
                             onTrimStart = { clip, sourceIn ->
                                 updateClip(clip.id) { TimelineEngine.trimStart(it, sourceIn) }
@@ -337,6 +372,15 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
             } else {
                 Text("Klip seç: sürükleyerek aynı kanalda sırala. Kırpma ve bölme araçları seçili klibe uygulanır.", color = VexPalette.TextDisabled, style = MaterialTheme.typography.labelSmall)
             }
+        }
+        Row(
+            Modifier.fillMaxWidth().background(VexPalette.Panel).padding(horizontal = 8.dp, vertical = 5.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onBack) { Icon(Icons.Rounded.Home, null); Spacer(Modifier.width(4.dp)); Text("Ana Sayfa") }
+            TextButton(onClick = onBack) { Icon(Icons.Rounded.VideoLibrary, null); Spacer(Modifier.width(4.dp)); Text("Projeler") }
+            TextButton(onClick = { }) { Icon(Icons.Rounded.Edit, null, tint = VexPalette.Purple); Spacer(Modifier.width(4.dp)); Text("Stüdyo", color = VexPalette.Purple) }
         }
     }
 
