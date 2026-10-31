@@ -182,8 +182,8 @@ fun EditorScreen(project: ProjectEntity, onBack: () -> Unit) {
 
         Box(Modifier.fillMaxWidth().weight(0.85f).padding(horizontal = 12.dp).background(Color.Black, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
             when {
-                activeVideo != null -> AndroidView(Modifier.fillMaxSize(), factory = { PlayerView(it).apply { this.player = player; useController = false } }, update = { it.player = player })
-                activePhoto != null -> AndroidView(Modifier.fillMaxSize(), factory = { ImageView(it).apply { scaleType = ImageView.ScaleType.FIT_CENTER; setImageURI(activePhoto) } }, update = { it.setImageURI(activePhoto) })
+                activeVideo != null -> AndroidView(factory = { ctx -> PlayerView(ctx).apply { this.player = player; useController = false } }, modifier = Modifier.fillMaxSize(), update = { view -> view.player = player })
+                activePhoto != null -> AndroidView(factory = { ctx -> ImageView(ctx).apply { scaleType = ImageView.ScaleType.FIT_CENTER; setImageURI(activePhoto) } }, modifier = Modifier.fillMaxSize(), update = { view -> view.setImageURI(activePhoto) })
                 else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Rounded.VideoLibrary, null, tint = VexPalette.Purple)
                     Text("Videolarını veya fotoğraflarını ekle", color = Color.White)
