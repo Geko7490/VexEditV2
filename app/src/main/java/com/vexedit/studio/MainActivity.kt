@@ -87,7 +87,7 @@ import java.text.DateFormat
 import java.util.Date
 
 private enum class AppDestination(val label: String) {
-    HOME("Ana Sayfa"), PROJECTS("Projeler"), CREATE("Oluştur"), AUDIO("Ses"), SETTINGS("Ayarlar")
+    HOME("Ana Sayfa"), PROJECTS("Projeler"), CREATE("Oluştur"), AUDIO("Ses"), SETTINGS("Ayarlar"), TRASH("Çöp Kutusu")
 }
 
 private enum class ProjectLayout { GRID, LIST }
@@ -108,7 +108,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun VexStudioApp(viewModel: ProjectViewModel) {
+@OptIn(ExperimentalMaterial3Api::class)\nprivate fun VexStudioApp(viewModel: ProjectViewModel) {
     var destination by remember { mutableStateOf(AppDestination.HOME) }
     var showCreate by remember { mutableStateOf(false) }
     var layout by remember { mutableStateOf(ProjectLayout.GRID) }
@@ -155,7 +155,7 @@ private fun VexStudioApp(viewModel: ProjectViewModel) {
                                 AppDestination.PROJECTS -> Icon(Icons.Rounded.FolderOpen, contentDescription = item.label)
                                 AppDestination.CREATE -> Icon(Icons.Rounded.Add, contentDescription = item.label)
                                 AppDestination.AUDIO -> Icon(Icons.Rounded.AudioFile, contentDescription = item.label)
-                                AppDestination.SETTINGS -> Icon(Icons.Rounded.Settings, contentDescription = item.label)
+                                AppDestination.SETTINGS -> Icon(Icons.Rounded.Settings, contentDescription = item.label)\n                                AppDestination.TRASH -> Icon(Icons.Rounded.Delete, contentDescription = item.label)
                             }
                         },
                         label = { Text(item.label, maxLines = 1) },
